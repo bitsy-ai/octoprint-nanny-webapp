@@ -1,0 +1,7 @@
+Hey {{FIRST_NAME }},
+
+Your subscription to Print Nanny is now active 💜
+
+
+Thanks,
+Print Nanny

@@ -6,6 +6,9 @@ from django.http import HttpRequest, request
 from django.contrib.auth import get_user_model
 from django.shortcuts import redirect
 from djstripe import webhooks
+from djstripe import utils
+import environ
+env = environ.Env()
 
 import djstripe.models
 import djstripe.settings
@@ -42,11 +45,20 @@ class SubscriptionsListView(DashboardView):
         ctx["SUBSCRIPTIONS"] = customer.subscriptions.all().order_by("-created")
         ctx["PRODUCTS"] = djstripe.models.Product.objects.filter(active=True)
         for p in ctx["PRODUCTS"]:
+            print(f"Product: {p.name}")
             p.prices_list = p.prices.filter(active=True)
+            for price in p.prices_list:
+                if (price.billing_scheme == "tiered"):
+                    p.tiered = True
+                    for tier in price.tiers:
+                        price_in_cents = tier["unit_amount"] if tier["flat_amount"] == None else tier["flat_amount"]
+                        readable_price = utils.get_friendly_currency_amount(price_in_cents/100,price.currency)
+                        tier["human_readable_price"] = readable_price
 
         ctx["DEVICES"] = OctoPrintDevice.objects.filter(user=self.request.user)
 
         return ctx
+
 
 
 def subscriptions_payment_intent_view_create(request: HttpRequest):
@@ -59,7 +71,7 @@ def subscriptions_payment_intent_view_create(request: HttpRequest):
         return JsonResponse(
             {"err": "No plan selected. Please select a subscription plan"}, status=400
         )
-    if "devices" not in data.keys() or not len(data["devices"]):
+    if ("devices" not in data.keys() or not len(data["devices"])) and "amount" not in data.keys():
         return JsonResponse(
             {
                 "err": "No device selected. Please select a device to apply the subscription to"
@@ -67,14 +79,24 @@ def subscriptions_payment_intent_view_create(request: HttpRequest):
             status=400,
         )
 
-    devices = OctoPrintDevice.objects.filter(user=request.user, pk__in=data["devices"])
-    if not len(devices) or len(devices) != len(data["devices"]):
-        return JsonResponse(
-            {
-                "err": "The selected devices are not valid or do not exist. Please select at least one valid device - but we like your curiosity :)"
-            },
-            status=400,
-        )
+    if ("devices" in data.keys()):
+        devices = OctoPrintDevice.objects.filter(user=request.user, pk__in=data["devices"])
+        if not len(devices) or len(devices) != len(data["devices"]):
+            return JsonResponse(
+                {
+                    "err": "The selected devices are not valid or do not exist. Please select at least one valid device - but we like your curiosity :)"
+                },
+                status=400,
+            )
+        quant = len(devices)
+        metas = {"devices": ",".join([str(x.id) for x in devices])}
+    else:
+        quant = data["amount"]
+        metas = {"amount":data["amount"]}
+
+
+
+    
 
     customer = djstripe.models.Customer.objects.get(subscriber=request.user)
     session = stripe.checkout.Session.create(
@@ -86,13 +108,13 @@ def subscriptions_payment_intent_view_create(request: HttpRequest):
         line_items=[
             {
                 "price": data["price_id"],
-                "quantity": len(devices),
+                "quantity": quant,
                 "description": "Print-Nanny Subscription",
             }
         ],
         api_key=djstripe.settings.STRIPE_SECRET_KEY,
         allow_promotion_codes=True,
-        metadata={"devices": ",".join([str(x.id) for x in devices])},
+        metadata= metas,
     )
     return JsonResponse({"session_id": session.id}, status=200)
 

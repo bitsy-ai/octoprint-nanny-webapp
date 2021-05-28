@@ -74,16 +74,35 @@
                             <div class="card-body">
                                 <h5 class="card-title">{{ product.name }}</h5>
                                 <p class="card-text">{{ product.description }}</p>
+                                {% if not product.tiered %}
                                 <div class="form-group">
                                     <div class="custom-control custom-checkbox">
                                         {% for device in DEVICES %}
-                                            <input class="custom-control-input" type="checkbox" name="devices" value="{{ device.id }}" id="subscribe-device-{{ device.id }}" />
-                                            <label class="custom-control-label" for="subscribe-device-{{ device.id }}">{{ device.name }}</label>
+                                            <input class="custom-control-input" type="checkbox" name="devices" value="{{ device.id }}" id="subscribe-device-{{ device.id }}-{{ product.id }}" />
+                                            <label class="custom-control-label" for="subscribe-device-{{ device.id }}-{{ product.id }}">{{ device.name }}</label>
                                         {% endfor %}
                                     </div>
                                 </div>
+                                {% endif %}
                                 {% for price in product.prices_list %}
-                                    <a href="javascript: paySubscription('{{ price.id }}');" class="btn btn-primary">{{ price.human_readable_price }}</a>
+                                    {% if price.billing_scheme != "tiered" %}
+                                        <a href="javascript: paySubscription('{{ price.id }}');" class="btn btn-primary">{{ price.human_readable_price }}</a>
+                                    {% else %}
+                                        {% for tier in price.tiers%}
+                                            <a href="javascript: paySubscription('{{ price.id }}',{% if tier.up_to == None %} 9999 {% else %} {{tier.up_to}} {% endif %} );" class="btn btn-primary">
+                                                {% if tier.up_to == None %} 
+                                                    Unlimited printers
+                                                {% elif tier.up_to == 1 %} 
+                                                    1 printer
+                                                {% else %} 
+                                                    {{ tier.up_to }} printer
+                                                {% endif %}
+                                                for a year 
+                                                <br>
+                                                {{ tier.human_readable_price }} 
+                                            </a>
+                                        {% endfor %}
+                                    {% endif %}
                                 {% endfor %}
                             </div> <!-- end card-body-->
                         </div> <!-- end card-->
@@ -163,16 +182,24 @@
         return decodeURIComponent(xsrfCookies[0].split('=')[1]);
     }
 
-    function paySubscription(price_id) {
+    function paySubscription(price_id, amount) {
+        console.log(amount)
+        amount = amount || null;
         var devices = $("input:checkbox[name=devices]:checked").map(function() { return $(this).val() }).get();
         var displayError = $("#card-errors");
         displayError.text("");
         displayError.hide();
 
-        if (devices.length === 0) {
+        if (devices.length === 0 && amount==null) {
             displayError.text("Please select at least one device");
             displayError.show();
             return
+        }
+
+        if (devices.length === 0 && amount!=null){
+            json_body = JSON.stringify({ price_id, amount })
+        }else{
+            json_body = JSON.stringify({ price_id, devices })
         }
 
         fetch("{% url 'subscriptions:payment_intent' %}", {
@@ -183,7 +210,7 @@
                 "Content-Type": "application/json",
                 "X-Requested-With": "XMLHttpRequest"
             },
-            body: JSON.stringify({ price_id, devices })
+            body: json_body
         }).then(function (result) {
             result.json().then(function (json) {
                 // Something went wrong with a message too

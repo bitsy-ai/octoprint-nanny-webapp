@@ -61,5 +61,10 @@ def is_subscribed(self) -> bool:
     customer = djstripe.models.Customer.objects.get(subscriber=self)
     return customer.has_any_active_subscription()
 
+def is_founding_member(self) -> bool:
+    user_badge = MemberBadge.objects.get(user=self)
+    return user_badge.type == "FOUNDING_MEMBER"
 
+
+User.add_to_class("is_founding_member", is_founding_member)
 User.add_to_class("is_subscribed", is_subscribed)

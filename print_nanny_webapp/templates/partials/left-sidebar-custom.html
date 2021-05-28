@@ -134,6 +134,16 @@
             <p class="mb-3">{% trans "Hang out with 3D print fanatics and makers."%}</p>
             <a href="{{DISCORD_URL}}" id="discord-sidebar" class="discord btn btn-outline-light btn-sm">{% trans "Join" %}</a>
         </div>
+        {% if user.is_founding_member %}
+        <div class="help-box text-white text-center">
+            <!-- <a href="javascript: void(0);" class="float-right close-btn text-white">
+                <i class="mdi mdi-close"></i>
+            </a> -->
+            <!-- <img src="{% static 'images/help-icon.svg' %}" height="90" alt="Helper Icon Image" /> -->
+            <h5 class="mt-3">{% trans "You are a founding member" %}</h5>
+            <p class="mb-3">{% trans "Thanks for you support"%}</p>
+        </div>
+        {% endif %}
         <!-- end Help Box -->
         <!-- Upgrade Box -->
         <!-- <div class="help-box text-white text-center">
